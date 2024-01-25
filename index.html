@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Add a 3D model with three.js</title>
+	<meta property="og:description" content="Use a custom style layer with three.js to add a 3D model to the map." />
+	<meta charset='utf-8'>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+	<div id="map"></div>
+	<script type="importmap">
+		{
+			"imports": {
+				"three": "../build/three.module.js",
+				"three/addons/": "./jsm/"
+			}
+		}
+	</script>
+
+	<script type="module">
+		import * as THREE from 'three';
+		import * as maplibregl from 'maplibre-gl';
+		import Stats from 'three/addons/libs/stats.module.js';
+		import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+		import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+		let scene, renderer, camera, stats, light1, light2, light3, light4;
+    	let model, skeleton, mixer, clock, animations;
+		const map = new maplibregl.Map({
+			container: 'map',
+			style: 'https://api.maptiler.com/maps/basic/style.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL',
+			// style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+			zoom: 18,
+			center: [105.83524935692617, 21.0369236457444],
+			pitch: 60,
+			antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
+		});
+
+		// parameters to ensure the model is georeferenced correctly on the map
+		const modelOrigin = [105.83411960936309, 21.03593705647982];
+		const modelAltitude = 0;
+		const modelRotate = [Math.PI / 2, 0, 0];
+
+		const modelAsMercatorCoordinate = maplibregl.MercatorCoordinate.fromLngLat(
+			modelOrigin,
+			modelAltitude
+		);
+
+		// transformation parameters to position, rotate and scale the 3D model onto the map
+		const modelTransform = {
+			translateX: modelAsMercatorCoordinate.x,
+			translateY: modelAsMercatorCoordinate.y,
+			translateZ: modelAsMercatorCoordinate.z,
+			rotateX: modelRotate[0],
+			rotateY: modelRotate[1],
+			rotateZ: modelRotate[2],
+			/* Since our 3D model is in real world meters, a scale transform needs to be
+			* applied since the CustomLayerInterface expects units in MercatorCoordinates.
+			*/
+			scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
+		};
+
+		// configuration of the custom layer for a 3D model per the CustomLayerInterface
+		const customLayer = {
+			id: '3d-model',
+			type: 'custom',
+			renderingMode: '3d',
+			onAdd(map, gl) {
+				camera = new THREE.Camera();
+				scene = new THREE.Scene();
+
+				// create two three.js lights to illuminate the model
+				const directionalLight = new THREE.DirectionalLight(0xffffff);
+				directionalLight.position.set(0, -70, 100).normalize();
+				scene.add(directionalLight);
+
+				const directionalLight2 = new THREE.DirectionalLight(0xffffff);
+				directionalLight2.position.set(0, 70, 100).normalize();
+				scene.add(directionalLight2);
+
+				// LIGHTS
+				// const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 3);
+				// hemiLight.position.set(0, 50, 0);
+				// scene.add(hemiLight);
+
+				// const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+				// dirLight.position.set(- 3, 10, - 10);
+				// dirLight.castShadow = true;
+				// dirLight.shadow.camera.top = 2;
+				// dirLight.shadow.camera.bottom = - 2;
+				// dirLight.shadow.camera.left = - 2;
+				// dirLight.shadow.camera.right = 2;
+				// dirLight.shadow.camera.near = 0.1;
+				// dirLight.shadow.camera.far = 40;
+				// scene.add(dirLight);
+
+				// use the three.js GLTF loader to add the 3D model to the three.js scene
+				const loader = new GLTFLoader();
+				loader.load(
+					'./objects/hochiminh_musem-v1.glb',
+					(gltf) => {
+						gltf.scene.scale.set(3.64, 3.3, 3.3);
+						gltf.scene.rotation.set(0, 1.376, 0);
+						scene.add(gltf.scene);
+					}
+				);
+				// loader.load(
+				// 	'./objects/Sugar Building 1 (80m2).gltf',
+				// 	(gltf) => {
+				// 		// const mesh = gltf.scene.children[ 0 ];
+				// 		// const s = 0.35;
+				// 		// mesh.scale.set( s, s, s );
+				// 		// mesh.position.y = 15;
+				// 		// mesh.rotation.y = - 1;
+				// 		// mesh.castShadow = true;
+				// 		// mesh.receiveShadow = true;
+				// 		// scene.add( mesh );
+				//		scene.add(gltf.scene);
+				// 	}
+				// );
+				
+				// use the MapLibre GL JS map canvas for three.js
+				renderer = new THREE.WebGLRenderer({
+					canvas: map.getCanvas(),
+					context: gl,
+					antialias: true
+				});
+
+				renderer.autoClear = false;
+			},
+			render(gl, matrix) {
+				const rotationX = new THREE.Matrix4().makeRotationAxis(
+					new THREE.Vector3(1, 0, 0),
+					modelTransform.rotateX
+				);
+				const rotationY = new THREE.Matrix4().makeRotationAxis(
+					new THREE.Vector3(0, 1, 0),
+					modelTransform.rotateY
+				);
+				const rotationZ = new THREE.Matrix4().makeRotationAxis(
+					new THREE.Vector3(0, 0, 1),
+					modelTransform.rotateZ
+				);
+
+				const m = new THREE.Matrix4().fromArray(matrix);
+				const l = new THREE.Matrix4()
+					.makeTranslation(
+						modelTransform.translateX,
+						modelTransform.translateY,
+						modelTransform.translateZ
+					)
+					.scale(
+						new THREE.Vector3(
+							modelTransform.scale,
+							-modelTransform.scale,
+							modelTransform.scale
+						)
+					)
+					.multiply(rotationX)
+					.multiply(rotationY)
+					.multiply(rotationZ);
+
+				camera.projectionMatrix = m.multiply(l);
+				renderer.resetState();
+				renderer.render(scene, camera);
+				map.triggerRepaint();
+			}
+		};
+
+		map.on('style.load', () => {
+			map.addLayer(customLayer);
+		});
+	</script>
+</body>
+</html>
