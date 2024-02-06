@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 	<title>Add a 3D model with three.js</title>
 	<meta property="og:description" content="Use a custom style layer with three.js to add a 3D model to the map." />
@@ -9,6 +10,9 @@
 </head>
 
 <body>
+	<div id="control">
+		<div id="change-day-night-btn">Day</div>
+	</div>
 	<div id="map"></div>
 	<script type="importmap">
 		{
@@ -25,27 +29,33 @@
 		import Stats from 'three/addons/libs/stats.module.js';
 		import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 		import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-		import {datas} from './data.js';
+		import { datas } from './data.js';
 
+
+
+		let inten = 3;
 		const map = new maplibregl.Map({
 			container: 'map',
-			style: 'https://api.maptiler.com/maps/basic/style.json?key=get_your_own_OpIi9ZULNHzrESv6T2vL',
+			style: 'https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf',
+			// style: style,
 			// style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
 			zoom: 18,
 			center: [105.83524935692617, 21.0369236457444],
 			pitch: 60,
+
+
 			antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
 		});
 		let dataLayers = [];
 
 
-		const findMissingElements = (array1, array2, key)  => {
+		const findMissingElements = (array1, array2, key) => {
 			// Create a Set of unique keys from array2
 			const keysSet = new Set(array2.map(item => item[key]));
-		
+
 			// Filter elements from array1 that are not in keysSet
 			const missingElements = array1.filter(item => !keysSet.has(item[key]));
-		
+
 			return missingElements;
 		}
 
@@ -54,17 +64,17 @@
 			const ne_lng = sw.lng;
 			const sw_lat = sw.lat;
 			const sw_lng = ne.lng;
-			let dataLayersInView =  datas.reduce((oldData, item) => {
+			let dataLayersInView = datas.reduce((oldData, item) => {
 				let item_lng = item.coordinates[0];
 				let item_lat = item.coordinates[1];
 
 				if (ne_lng > sw_lng) {
-					if(item_lng > sw_lng && item_lng < ne_lng &&  item_lat > sw_lat && item_lat < ne_lat) {
-					oldData.push(item);
+					if (item_lng > sw_lng && item_lng < ne_lng && item_lat > sw_lat && item_lat < ne_lat) {
+						oldData.push(item);
 					}
 				} else {
-					if(item_lng < sw_lng && item_lng > ne_lng &&  item_lat > sw_lat && item_lat < ne_lat) {
-					oldData.push(item);
+					if (item_lng < sw_lng && item_lng > ne_lng && item_lat > sw_lat && item_lat < ne_lat) {
+						oldData.push(item);
 					}
 				}
 				return oldData;
@@ -83,7 +93,7 @@
 
 		const addLayer = (object) => {
 			let scene, camera, stats, light1, light2, light3, light4;
-    		let model, skeleton, mixer, clock, animations;
+			let model, skeleton, mixer, clock, animations;
 			console.log(object.id)
 			camera = new THREE.Camera();
 			scene = new THREE.Scene();
@@ -117,7 +127,7 @@
 				type: 'custom',
 				renderingMode: '3d',
 				onAdd(map, gl) {
-					const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+					const dirLight = new THREE.DirectionalLight(0xffffff, inten);
 					let d = 1000;
 					let r = 2;
 					let mapSize = 8192;
@@ -129,24 +139,25 @@
 					dirLight.shadow.camera.bottom = dirLight.shadow.camera.left = -d;
 					dirLight.shadow.camera.near = 1;
 					dirLight.shadow.camera.far = 400000000;
-					//dirLight.shadow.camera.visible = true;
+					dirLight.shadow.camera.visible = true;
 					scene.add(dirLight);
-    				scene.add(new THREE.DirectionalLightHelper(dirLight, 10));
+					// scene.add(new THREE.DirectionalLightHelper(dirLight, 10));
 					// use the three.js GLTF loader to add the 3D model to the three.js scene
 					const loader = new GLTFLoader();
-					
 					loader.load(
 						object.scenegraph,
 						(gltf) => {
-							gltf.scene.traverse(function(model) {
-							if (model.isMesh) {
-								model.castShadow = true;
-							}
-							});
-							gltf.scene.scale.set(3.64, 3.3, 3.3);
-							gltf.scene.rotation.set(0, 1.376, 0);
-							scene.add(gltf.scene);
-							const s = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3(0, 0, 0));
+							let glsence = gltf.scene;
+							// glsence.traverse(function (model) {
+							// 	if (model.isMesh) {
+							// 		model.castShadow = true;
+							// 	}
+							// });
+							glsence.castShadow = true;
+							glsence.scale.set(3.64, 3.3, 3.3);
+							glsence.rotation.set(0, 1.376, 0);
+							scene.add(glsence);
+							const s = new THREE.Box3().setFromObject(glsence).getSize(new THREE.Vector3(0, 0, 0));
 							const sizes = [s.x, s.y, s.z];
 							const planeSize = Math.max(...sizes) * 10;
 							const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize);
@@ -202,16 +213,42 @@
 			map.addLayer(customLayer);
 		}
 
-		map.on('style.load', () => {
+		let isNight = false;
+		map.on('load', function () {
+			const initialViewport = getWebViewport();
+			const dataLayersInView = getLayerInView(initialViewport._ne, initialViewport._sw);
+			dataLayersInView.forEach((item) => addLayer(item));
+			var btnChangeMode = document.getElementById('change-day-night-btn');
+			if (btnChangeMode) {
+				btnChangeMode.addEventListener('click', function () {
+					if (isNight) {
+						inter = 3;
+						map.setStyle('https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
+							isNight = false
+					} else {
+
+						console.log("isNight", isNight)
+						inten = 0.5;
+						map.setStyle('https://api.maptiler.com/maps/basic-v2-dark/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
+							isNight = true;
+					}
+				})
+
+			}
+		})
+
+		map.on('style.load', function () {
+			console.log("tyle.load")
+			dataLayers = [];
 			const initialViewport = getWebViewport();
 			const dataLayersInView = getLayerInView(initialViewport._ne, initialViewport._sw);
 			dataLayersInView.forEach((item) => addLayer(item));
 		});
 
 		map.on('click', (e) => {
-            // const coordinates = e.features[0].geometry.coordinates.slice();
-            console.log('coordinates', e)
-        });
+			// const coordinates = e.features[0].geometry.coordinates.slice();
+			console.log('coordinates', e)
+		});
 
 		// Function to get the web viewport with center coordinates
 		function getWebViewport() {
@@ -221,12 +258,13 @@
 		}
 
 		// Event listener for the 'dragend' event
-		map.on('dragend', function() {
-			const viewport = getWebViewport();
-			const dataLayersInView = getLayerInView(viewport._ne, viewport._sw);
-			console.log('dataLayersInView', dataLayersInView)
-			dataLayersInView.forEach((item) => addLayer(item));
-		});
+		// map.on('dragend', function () {
+		// 	const viewport = getWebViewport();
+		// 	const dataLayersInView = getLayerInView(viewport._ne, viewport._sw);
+		// 	dataLayersInView.forEach((item) => addLayer(item));
+		// });
+
 	</script>
 </body>
+
 </html>

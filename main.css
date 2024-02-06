@@ -1,2 +1,14 @@
 body { margin: 0; padding: 0; }
 html, body, #map { height: 100%; }
+#control {
+    height: 20px;
+}
+
+ #control #change-day-night-btn {
+    background-color: black;
+    color: aliceblue;
+    width: 200px;
+    text-align: center;
+    right: 0px;
+    left: auto;
+ }
