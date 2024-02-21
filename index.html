@@ -10,9 +10,6 @@
 </head>
 
 <body>
-	<div id="control">
-		<div id="change-day-night-btn">Day</div>
-	</div>
 	<div id="map"></div>
 	<script type="importmap">
 		{
@@ -41,22 +38,15 @@
 			// style: style,
 			// style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
 			zoom: 18,
-			center: [105.83524935692617, 21.0369236457444],
+			center: [105.82713626435122, 21.031704033872295],
 			pitch: 60,
-
-
 			antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
 		});
 		let dataLayers = [];
 
-
 		const findMissingElements = (array1, array2, key) => {
-			// Create a Set of unique keys from array2
 			const keysSet = new Set(array2.map(item => item[key]));
-
-			// Filter elements from array1 that are not in keysSet
 			const missingElements = array1.filter(item => !keysSet.has(item[key]));
-
 			return missingElements;
 		}
 
@@ -102,7 +92,6 @@
 			const modelOrigin = object.coordinates;
 			const modelAltitude = 0;
 			const modelRotate = [Math.PI / 2, 0, 0];
-
 			const modelAsMercatorCoordinate = maplibregl.MercatorCoordinate.fromLngLat(
 				modelOrigin,
 				modelAltitude
@@ -122,8 +111,9 @@
 				scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
 			};
 
+			const ambientLight = new THREE.AmbientLight(0xffffff, inten);
 			const dirLight = new THREE.DirectionalLight(0xffffff, inten);
-			let d = 1000;
+			let d = 2048;
 			let r = 2;
 			let mapSize = 8192;
 			dirLight.position.set(0, 700, 100);
@@ -132,10 +122,11 @@
 			dirLight.shadow.mapSize.height = mapSize;
 			dirLight.shadow.camera.top = dirLight.shadow.camera.right = d;
 			dirLight.shadow.camera.bottom = dirLight.shadow.camera.left = -d;
+			dirLight.shadow.mapSize.width = dirLight.shadow.mapSize.height = 1024
 			dirLight.shadow.camera.near = 1;
 			dirLight.shadow.camera.far = 400000;
-			dirLight.shadow.camera.visible = true;
-			scene.add(dirLight);
+			dirLight.shadow.camera.visible = true; 
+			scene.add(dirLight, ambientLight);
 			// configuration of the custom layer for a 3D model per the CustomLayerInterface
 			const customLayer = {
 				id: object.id,
@@ -170,41 +161,51 @@
 						}
 					);
 					renderer.autoClear = false;
-					renderer.shadowMap.enabled = true;
 					// renderer.shadowMap.autoUpdate = false;
-					// renderer.shadowMap.needsUpdate= true;
+					renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+					renderer.shadowMap.enabled = true;
+					renderer.shadowMap.needsUpdate = true;
 				},
+
 				render(gl, matrix) {
 					function animateSun() {
 						const date = new Date(); // Current date and time
+						date.setHours(date.getHours());
 						const latitude = 21.0285; // Latitude of Hanoi
 						const longitude = 105.8542; // Longitude of Hanoi
 						const sunPosition = SunCalc.getPosition(date, latitude, longitude);
-
 						// Convert Sun's Azimuth and Altitude to Three.js coordinates
 						const azimuth = -sunPosition.azimuth + Math.PI; // Inverse azimuth for Three.js
 						const altitude = sunPosition.altitude;
-
 						// Convert azimuth and altitude to directional light position
-						const lightDistance = 1000; // Distance of light from the scene origin
+						const lightDistance = 1024; // Distance of light from the scene origin
 						const lightPosition = new THREE.Vector3(
 							lightDistance * Math.cos(altitude) * Math.sin(azimuth),
 							lightDistance * Math.sin(altitude),
 							lightDistance * Math.cos(altitude) * Math.cos(azimuth)
 						);
-
 						// Normalize altitude to be between 0 and 1 (assuming sun is above horizon)
 						const normalizedAltitude = Math.max(0, Math.min(1, altitude / (Math.PI / 2)));
-
 						// Set light intensity based on normalized altitude
-						const minIntensity = 0.1; // Minimum intensity during nighttime
-						const maxIntensity = 5.0; // Maximum intensity during daytime
-						const lightIntensity = minIntensity + (maxIntensity - minIntensity) * normalizedAltitude
+						const minIntensity = 0.1                                  ; // Minimum intensity during nighttime
+						const maxIntensity = 5; // Maximum intensity during daytime
+						const lightIntensity = minIntensity + (maxIntensity - minIntensity) * normalizedAltitude ;                           
+						// console.log("lightIntensity",lightIntensity)
+						// const lightIntensity = 1.5
+						if (lightIntensity <= 1 && lightLevel == 2) {
+							map.setStyle('https://api.maptiler.com/maps/f3b4e6d4-f9ff-48ab-b2b3-8fdc83e21290/style.json?key=lekGUCzmcgURiaChlHJb', { diff: false }),
+							lightLevel = 1;
+						}
+						if (lightIntensity > 1 && lightLevel == 1 ) {
+							map.setStyle('https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
+							lightLevel = 2
+						}
 						// Set up directional light
-
 						dirLight.position.copy(lightPosition);
 						dirLight.intensity = lightIntensity;
-						requestAnimationFrame(animateSun);
+						ambientLight.intensity = lightIntensity / 2 ;
+						// requestAnimationFrame(animateSun);
+
 					}
 
 					const rotationX = new THREE.Matrix4().makeRotationAxis(
@@ -241,34 +242,17 @@
 					camera.projectionMatrix = m.multiply(l);
 					renderer.resetState();
 					renderer.render(scene, camera);
-					animateSun()
+					animateSun();
 					map.triggerRepaint();
 				}
 			};
 			map.addLayer(customLayer);
 		}
-
-		let isNight = false;
+		let lightLevel = 2;
 		map.on('load', function () {
 			const initialViewport = getWebViewport();
 			const dataLayersInView = getLayerInView(initialViewport._ne, initialViewport._sw);
 			dataLayersInView.forEach((item) => addLayer(item));
-			var btnChangeMode = document.getElementById('change-day-night-btn');
-			if (btnChangeMode) {
-				btnChangeMode.addEventListener('click', function () {
-					if (isNight) {
-						inten = 3;
-						map.setStyle('https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
-							isNight = false
-					} else {
-
-						inten = 0.5;
-						map.setStyle('https://api.maptiler.com/maps/basic-v2-dark/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
-							isNight = true;
-					}
-				})
-
-			}
 		})
 
 		map.on('style.load', function () {
@@ -286,19 +270,20 @@
 
 		// Function to get the web viewport with center coordinates
 		function getWebViewport() {
-			// Get the current geographical bounds of the map
 			var bounds = map.getBounds();
 			return bounds;
 		}
-
-
 
 		// Event listener for the 'dragend' event
 		map.on('dragend', function () {
 			const viewport = getWebViewport();
 			const dataLayersInView = getLayerInView(viewport._ne, viewport._sw);
-			dataLayersInView.forEach((item) => addLayer(item));
+			console.log("dataLayersInView", dataLayersInView)
+			if (dataLayersInView.length > 0) {
+				dataLayersInView.forEach((item) => addLayer(item));
+			}
 		});
+
 
 	</script>
 </body>
