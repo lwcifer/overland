@@ -12,3 +12,11 @@ html, body, #map { height: 100%; }
     right: 0px;
     left: auto;
  }
+
+ #timezone {
+    width: 60px;
+    height: 20px;
+    border-radius: 16px;
+    background-color:bisque;
+    cursor: pointer;
+ }

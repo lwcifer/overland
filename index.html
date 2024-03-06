@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-	<title>Add a 3D model with three.js</title>
+	<title>Wegle</title>
 	<meta property="og:description" content="Use a custom style layer with three.js to add a 3D model to the map." />
 	<meta charset='utf-8'>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -28,16 +28,13 @@
 		import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 		import { datas } from './data.js';
 		import SunCalc from 'suncalc'
-
-
-
 		let inten = 3;
 		const map = new maplibregl.Map({
 			container: 'map',
 			style: 'https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf',
 			// style: style,
 			// style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-			zoom: 18,
+			zoom: 15,
 			center: [105.82713626435122, 21.031704033872295],
 			pitch: 60,
 			antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
@@ -58,7 +55,6 @@
 			let dataLayersInView = datas.reduce((oldData, item) => {
 				let item_lng = item.coordinates[0];
 				let item_lat = item.coordinates[1];
-
 				if (ne_lng > sw_lng) {
 					if (item_lng > sw_lng && item_lng < ne_lng && item_lat > sw_lat && item_lat < ne_lat) {
 						oldData.push(item);
@@ -85,8 +81,10 @@
 		const addLayer = (object) => {
 			let scene, camera, stats;
 			let model, skeleton, mixer, clock, animations;
-			console.log(object.id)
-			camera = new THREE.Camera();
+			camera = new THREE.PerspectiveCamera(75,
+				window.innerWidth / window.innerHeight,
+				0.1,
+				1000);
 			scene = new THREE.Scene();
 			// parameters to ensure the model is georeferenced correctly on the map
 			const modelOrigin = object.coordinates;
@@ -111,12 +109,13 @@
 				scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
 			};
 
-			const ambientLight = new THREE.AmbientLight(0xffffff, inten);
-			const dirLight = new THREE.DirectionalLight(0xffffff, inten);
+			const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+			const dirLight = new THREE.DirectionalLight(0xffffff, 5);
 			let d = 2048;
 			let r = 2;
 			let mapSize = 8192;
 			dirLight.position.set(0, 700, 100);
+			dirLight.shadow.radius = r;
 			dirLight.castShadow = true;
 			dirLight.shadow.mapSize.width = mapSize;
 			dirLight.shadow.mapSize.height = mapSize;
@@ -124,8 +123,11 @@
 			dirLight.shadow.camera.bottom = dirLight.shadow.camera.left = -d;
 			dirLight.shadow.mapSize.width = dirLight.shadow.mapSize.height = 1024
 			dirLight.shadow.camera.near = 1;
-			dirLight.shadow.camera.far = 400000;
-			dirLight.shadow.camera.visible = true; 
+			dirLight.shadow.camera.far = 524288;
+			dirLight.shadow.camera.visible = true;
+			if(object.id == 2 || object.id == 3) {
+				dirLight.shadow.bias = -1/32000;
+			}
 			scene.add(dirLight, ambientLight);
 			// configuration of the custom layer for a 3D model per the CustomLayerInterface
 			const customLayer = {
@@ -144,33 +146,40 @@
 									model.castShadow = true;
 								}
 							});
+							glsence.receiveShadow = true;
 							glsence.castShadow = true;
 							glsence.scale.set(3.64, 3.3, 3.3);
 							glsence.rotation.set(0, 1.376, 0);
 							scene.add(glsence);
 							const s = new THREE.Box3().setFromObject(glsence).getSize(new THREE.Vector3(0, 0, 0));
 							const sizes = [s.x, s.y, s.z];
-							const planeSize = Math.max(...sizes) * 10;
-							const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize);
+							const planeSize = Math.max(...sizes) * 30;
+							const planeGeo = new THREE.PlaneGeometry(planeSize, s.z * 10);
 							const planeMat = new THREE.ShadowMaterial();
 							planeMat.opacity = 0.5;
+							planeMat.transparent = true;
 							let plane = new THREE.Mesh(planeGeo, planeMat);
 							plane.rotateX(-Math.PI / 2);
 							plane.receiveShadow = true;
+							planeMat.depthTest = true;
+							planeMat.depthWrite = false
 							scene.add(plane);
 						}
 					);
+					renderer.setClearColor(0x000000);
+					renderer.setClearAlpha(0);
 					renderer.autoClear = false;
-					// renderer.shadowMap.autoUpdate = false;
 					renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 					renderer.shadowMap.enabled = true;
+					renderer.gammaInput = true; // Bật gamma input
+					renderer.gammaOutput = true; // Bật gamma output
+					renderer.physicallyCorrectLights = true;
 					renderer.shadowMap.needsUpdate = true;
 				},
 
 				render(gl, matrix) {
 					function animateSun() {
 						const date = new Date(); // Current date and time
-						date.setHours(date.getHours());
 						const latitude = 21.0285; // Latitude of Hanoi
 						const longitude = 105.8542; // Longitude of Hanoi
 						const sunPosition = SunCalc.getPosition(date, latitude, longitude);
@@ -187,26 +196,13 @@
 						// Normalize altitude to be between 0 and 1 (assuming sun is above horizon)
 						const normalizedAltitude = Math.max(0, Math.min(1, altitude / (Math.PI / 2)));
 						// Set light intensity based on normalized altitude
-						const minIntensity = 0.1                                  ; // Minimum intensity during nighttime
+						const minIntensity = 1; // Minimum intensity during nighttime
 						const maxIntensity = 5; // Maximum intensity during daytime
-						const lightIntensity = minIntensity + (maxIntensity - minIntensity) * normalizedAltitude ;                           
-						// console.log("lightIntensity",lightIntensity)
-						// const lightIntensity = 1.5
-						if (lightIntensity <= 1 && lightLevel == 2) {
-							map.setStyle('https://api.maptiler.com/maps/f3b4e6d4-f9ff-48ab-b2b3-8fdc83e21290/style.json?key=lekGUCzmcgURiaChlHJb', { diff: false }),
-							lightLevel = 1;
-						}
-						if (lightIntensity > 1 && lightLevel == 1 ) {
-							map.setStyle('https://api.maptiler.com/maps/basic/style.json?key=0LV4DUQC2Ud6fTkmgGJf', { diff: false }),
-							lightLevel = 2
-						}
-						// Set up directional light
+						const lightIntensity = minIntensity + (maxIntensity - minIntensity) * normalizedAltitude;
 						dirLight.position.copy(lightPosition);
 						dirLight.intensity = lightIntensity;
-						ambientLight.intensity = lightIntensity / 2 ;
-						// requestAnimationFrame(animateSun);
-
-					}
+						ambientLight.intensity = lightIntensity / 2;
+					};
 
 					const rotationX = new THREE.Matrix4().makeRotationAxis(
 						new THREE.Vector3(1, 0, 0),
@@ -226,6 +222,7 @@
 						.makeTranslation(
 							modelTransform.translateX,
 							modelTransform.translateY,
+
 							modelTransform.translateZ
 						)
 						.scale(
@@ -240,6 +237,7 @@
 						.multiply(rotationZ);
 
 					camera.projectionMatrix = m.multiply(l);
+					renderer.premultipliedAlpha = true
 					renderer.resetState();
 					renderer.render(scene, camera);
 					animateSun();
@@ -248,7 +246,7 @@
 			};
 			map.addLayer(customLayer);
 		}
-		let lightLevel = 2;
+
 		map.on('load', function () {
 			const initialViewport = getWebViewport();
 			const dataLayersInView = getLayerInView(initialViewport._ne, initialViewport._sw);
@@ -256,7 +254,6 @@
 		})
 
 		map.on('style.load', function () {
-			console.log("tyle.load")
 			dataLayers = [];
 			const initialViewport = getWebViewport();
 			const dataLayersInView = getLayerInView(initialViewport._ne, initialViewport._sw);
@@ -268,23 +265,42 @@
 			console.log('coordinates', e)
 		});
 
-		// Function to get the web viewport with center coordinates
+		// Function to get the web viewport with center coordinates0
 		function getWebViewport() {
 			var bounds = map.getBounds();
 			return bounds;
 		}
 
 		// Event listener for the 'dragend' event
-		map.on('dragend', function () {
+		map.on('drag', function () {
 			const viewport = getWebViewport();
 			const dataLayersInView = getLayerInView(viewport._ne, viewport._sw);
-			console.log("dataLayersInView", dataLayersInView)
 			if (dataLayersInView.length > 0) {
 				dataLayersInView.forEach((item) => addLayer(item));
 			}
 		});
 
+		function changeFilterBrightness(brightnessPercentage) {
+			let mapElement = document.getElementById("map")
+			if (mapElement) {
+				mapElement.style.filter = "brightness(" + brightnessPercentage + "%)";
+			}
+		}
 
+		setInterval(function () {
+			let startHour = 6;
+			let endHour = 18;
+			let brightnessPercentage = 50;
+			let currentTime = new Date();
+			currentTime.setHours(currentTime.getHours());
+			let times = currentTime.getHours() * 3600 + currentTime.getMinutes() * 60 + currentTime.getSeconds();
+			let hours = currentTime.getHours();
+			if (hours >= startHour && hours < endHour) {
+				// Tăng độ sáng từ 6 giờ sáng đến 6 giờ chiều
+				brightnessPercentage = Math.abs(Math.sin(times / 86400 * Math.PI) * 100);
+			}
+			changeFilterBrightness(brightnessPercentage);
+		}, 500); // Cập nhật độ sáng mỗi gio
 	</script>
 </body>
 
